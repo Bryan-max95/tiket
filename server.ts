@@ -94,6 +94,24 @@ async function startServer() {
     res.json(metrics);
   });
 
+  app.get("/api/tickets/:id/time-logs", (req, res) => {
+    const { id } = req.params;
+    const logs = TicketService.getTimeLogs(id);
+    const total = TicketService.getTotalTime(id);
+    res.json({ logs, total });
+  });
+
+  app.post("/api/tickets/:id/time-logs", (req, res) => {
+    const { id } = req.params;
+    const { userId, durationMinutes, description } = req.body;
+    try {
+      TicketService.logTime(id, userId, durationMinutes, description);
+      res.status(201).json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

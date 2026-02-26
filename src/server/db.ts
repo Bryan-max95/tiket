@@ -66,6 +66,17 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(ticket_id) REFERENCES tickets(id)
   );
+
+  CREATE TABLE IF NOT EXISTS ticket_time_logs (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(ticket_id) REFERENCES tickets(id),
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  );
 `);
 
 // Seed initial data if empty

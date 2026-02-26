@@ -118,4 +118,30 @@ export class TicketService {
     this.logHistory(ticketId, userId, `Status changed to ${newStatus}`, ticket.status, newStatus);
     return this.getTicketById(ticketId);
   }
+
+  static logTime(ticketId: string, userId: string, durationMinutes: number, description: string) {
+    const id = uuidv4();
+    db.prepare(`
+      INSERT INTO ticket_time_logs (id, ticket_id, user_id, duration_minutes, description)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, ticketId, userId, durationMinutes, description);
+    
+    this.logHistory(ticketId, userId, `Logged ${durationMinutes} minutes: ${description}`, null, null);
+    return id;
+  }
+
+  static getTimeLogs(ticketId: string) {
+    return db.prepare(`
+      SELECT l.*, u.name as user_name
+      FROM ticket_time_logs l
+      JOIN users u ON l.user_id = u.id
+      WHERE l.ticket_id = ?
+      ORDER BY l.created_at DESC
+    `).all(ticketId);
+  }
+
+  static getTotalTime(ticketId: string) {
+    const result = db.prepare('SELECT SUM(duration_minutes) as total FROM ticket_time_logs WHERE ticket_id = ?').get(ticketId) as { total: number };
+    return result?.total || 0;
+  }
 }

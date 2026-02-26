@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Clock, 
@@ -6,9 +6,12 @@ import {
   MessageSquare, 
   History,
   ArrowUpRight,
-  CheckCircle2
+  CheckCircle2,
+  Play,
+  Square,
+  Plus
 } from 'lucide-react';
-import { Ticket, User } from '../types';
+import { Ticket, User, TimeLog } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -22,6 +25,72 @@ interface TicketDetailProps {
 
 export default function TicketDetail({ ticket, user, onClose, onUpdate }: TicketDetailProps) {
   const [updating, setUpdating] = useState(false);
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
+  const [totalTime, setTotalTime] = useState(0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [manualMinutes, setManualMinutes] = useState('');
+  const [timeDescription, setTimeDescription] = useState('');
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    fetchTimeLogs();
+  }, [ticket.id]);
+
+  useEffect(() => {
+    if (isTimerRunning) {
+      timerRef.current = setInterval(() => {
+        setTimerSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isTimerRunning]);
+
+  const fetchTimeLogs = async () => {
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}/time-logs`);
+      const data = await res.json();
+      setTimeLogs(data.logs);
+      setTotalTime(data.total);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleLogTime = async (minutes: number, desc: string) => {
+    if (minutes <= 0) return;
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}/time-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          durationMinutes: minutes,
+          description: desc || 'Trabajo en ticket'
+        })
+      });
+      if (res.ok) {
+        fetchTimeLogs();
+        setTimerSeconds(0);
+        setManualMinutes('');
+        setTimeDescription('');
+        setIsTimerRunning(false);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   const handleStatusChange = async (newStatus: string) => {
     setUpdating(true);
@@ -76,6 +145,72 @@ export default function TicketDetail({ ticket, user, onClose, onUpdate }: Ticket
             </div>
           </section>
 
+          {/* Time Tracking Section for Agents */}
+          {canManage && (
+            <section className="bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-indigo-900 uppercase tracking-widest">Registro de Tiempo</h3>
+                <div className="flex items-center gap-2 text-indigo-600 font-bold text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span>Total: {Math.floor(totalTime / 60)}h {totalTime % 60}m</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Timer */}
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Cronómetro</span>
+                    <span className="text-xl font-mono font-bold text-gray-900">{formatTime(timerSeconds)}</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (isTimerRunning) {
+                        handleLogTime(Math.max(1, Math.ceil(timerSeconds / 60)), timeDescription);
+                      } else {
+                        setIsTimerRunning(true);
+                      }
+                    }}
+                    className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                      isTimerRunning ? "bg-red-500 text-white hover:bg-red-600" : "bg-indigo-600 text-white hover:bg-indigo-700"
+                    )}
+                  >
+                    {isTimerRunning ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+                  </button>
+                </div>
+
+                {/* Manual Entry */}
+                <div className="bg-white p-4 rounded-xl border border-indigo-100 flex items-center gap-2">
+                  <div className="flex-1">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Manual (min)</span>
+                    <input 
+                      type="number" 
+                      value={manualMinutes}
+                      onChange={e => setManualMinutes(e.target.value)}
+                      placeholder="Minutos"
+                      className="w-full text-sm font-bold text-gray-900 border-none p-0 focus:ring-0"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => handleLogTime(parseInt(manualMinutes), timeDescription)}
+                    className="w-10 h-10 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center hover:bg-gray-200 transition-all"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <input 
+                type="text" 
+                value={timeDescription}
+                onChange={e => setTimeDescription(e.target.value)}
+                placeholder="Descripción del trabajo realizado..."
+                className="w-full px-4 py-2 bg-white border border-indigo-100 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 transition-all"
+              />
+            </section>
+          )}
+
           <section className="bg-gray-50 p-6 rounded-2xl border border-black/5">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Descripción</h3>
             <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
@@ -94,10 +229,24 @@ export default function TicketDetail({ ticket, user, onClose, onUpdate }: Ticket
 
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">Actividad</h3>
+              <h3 className="text-lg font-bold text-gray-900">Actividad y Tiempo</h3>
               <button className="text-xs font-bold text-indigo-600 hover:underline">Ver Historial Completo</button>
             </div>
             <div className="space-y-6 relative before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
+              {timeLogs.map((log) => (
+                <div key={log.id} className="relative pl-10">
+                  <div className="absolute left-0 top-0 w-8 h-8 bg-emerald-50 rounded-full flex items-center justify-center border-4 border-white">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                  </div>
+                  <div className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-bold text-gray-900">{log.user_name} registró {log.duration_minutes} min</span>
+                      <span className="text-[10px] text-gray-400">{format(new Date(log.created_at), "HH:mm")}</span>
+                    </div>
+                    <p className="text-sm text-gray-600">{log.description}</p>
+                  </div>
+                </div>
+              ))}
               <div className="relative pl-10">
                 <div className="absolute left-0 top-0 w-8 h-8 bg-indigo-50 rounded-full flex items-center justify-center border-4 border-white">
                   <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />

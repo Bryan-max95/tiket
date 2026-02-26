@@ -35,3 +35,13 @@ export interface Metrics {
   byStatus: Record<string, number>;
   byPriority: Record<string, number>;
 }
+
+export interface TimeLog {
+  id: string;
+  ticket_id: string;
+  user_id: string;
+  user_name: string;
+  duration_minutes: number;
+  description: string;
+  created_at: string;
+}
