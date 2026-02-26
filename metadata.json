@@ -1,0 +1,5 @@
+{
+  "name": "Enterprise IT Ticket System",
+  "description": "A professional incident management platform with RBAC, intelligent assignment, SLA tracking, and real-time metrics.",
+  "requestFramePermissions": []
+}
